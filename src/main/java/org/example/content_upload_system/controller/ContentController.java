@@ -8,6 +8,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
+import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.util.HashMap;
 import java.util.List;
@@ -54,6 +55,8 @@ public class ContentController {
             Map<String, String> body = new HashMap<>();
             body.put("error", ex.getMessage());
             return ResponseEntity.status(404).body(body);
+        } catch (FileNotFoundException e) {
+            throw new RuntimeException(e);
         }
     }
 

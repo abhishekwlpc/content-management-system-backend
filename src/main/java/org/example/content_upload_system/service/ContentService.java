@@ -4,15 +4,20 @@ import lombok.RequiredArgsConstructor;
 
 import org.example.content_upload_system.entity.Content;
 import org.example.content_upload_system.entity.Instructor;
+import org.example.content_upload_system.exception.CannotExtractInstructorIDFromToken;
+import org.example.content_upload_system.exception.FileSizeLimitExceedException;
+import org.example.content_upload_system.exception.InvalidInstrctorIDException;
 import org.example.content_upload_system.repository.ContentRepository;
 import org.example.content_upload_system.repository.InstructorRepository;
 import org.example.content_upload_system.security.JwtUtil;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 
 
+import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.time.LocalDateTime;
 import java.util.List;
@@ -40,16 +45,20 @@ public class ContentService {
     public Content uploadFile(MultipartFile file, String token) throws IOException {
 
         if (file == null || file.isEmpty()) {
-            throw new IllegalArgumentException("File must not be null or empty");
+            throw new FileNotFoundException("File is missing or empty");
+        }
+
+        if(file.getSize() > 100 * 1024 * 1024) {
+            throw new FileSizeLimitExceedException("File size exceeds the maximum allowed limit of 100MB", HttpStatus.CONTENT_TOO_LARGE);
         }
 
         Integer instructorId = jwtUtil.extractInstructorId(token);
         if (instructorId == null) {
-            throw new RuntimeException("Unable to extract instructor id from token");
+            throw new CannotExtractInstructorIDFromToken("Unable to extract instructor id from token", HttpStatus.BAD_REQUEST);
         }
 
         Instructor instructor = instructorRepository.findById(instructorId)
-                .orElseThrow(() -> new RuntimeException("Instructor not found with id: " + instructorId));
+                .orElseThrow(() -> new InvalidInstrctorIDException("Instructor not found with id: " + instructorId, HttpStatus.NOT_FOUND));
 
         String fileUrl = s3Service.uploadFile(file);
 
@@ -73,10 +82,10 @@ public class ContentService {
         return contentRepository.findById(id).orElse(null);
     }
 
-    public String getDownloadUrl(Long id) {
+    public String getDownloadUrl(Long id) throws FileNotFoundException {
 
         Content content = contentRepository.findById(id)
-                .orElseThrow(() -> new RuntimeException("File not found"));
+                .orElseThrow(() -> new FileNotFoundException("File not found"));
 
         String fileUrl = content.getFileUrl();
         if (fileUrl == null || (!fileUrl.contains("s3.amazonaws.com") && !fileUrl.contains("/" + s3Service.getBucketName() + "/"))) {
